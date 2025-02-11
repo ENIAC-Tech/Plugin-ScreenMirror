@@ -1,0 +1,81 @@
+{
+    "name": "Screen Mirror",
+    "uuid": "com.eniac.screen_mirror",
+    "version": "1.0.0",
+    "author": "ENIAC",
+    "entry": "backend/plugin.cjs",
+    "description": "Display a portion of the current screen.",
+    "repo": "https://github.com/ENIAC-Tech/ScreenMirror",
+    "sdk": {
+        "version": "1.0.0"
+    },
+    "software": {
+        "minimumVersion": "1.0.0"
+    },
+    "os": [
+        {
+            "platform": "mac",
+            "minimumVersion": "10.15"
+        },
+        {
+            "platform": "windows",
+            "minimumVersion": "10"
+        }
+    ],
+    "device": [
+        {
+            "name": "flexbar",
+            "version": "1.0.0"
+        }
+    ],
+    "keyLibrary": {
+        "title": "$LibTitle",
+        "style": {
+            "icon": "mdi mdi-monitor-screenshot"
+        },
+        "children": [
+            {
+                "title": "$ScreenMirror.Title",
+                "tip": "$ScreenMirror.Tip",
+                "cid": "com.eniac.screen_mirror.screen_mirror",
+                "config": {
+                    "keyType": "default",
+                    "clickable": false,
+                    "platform": [
+                        "windows",
+                        "mac"
+                    ]
+                },
+                "style": {
+                    "icon": "mdi mdi-monitor-screenshot",
+                    "width": 240
+                },
+                "data": {
+                    "bounds": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 240,
+                        "height": 60
+                    },
+                    "interval": "1000",
+                    "screenId": "",
+                    "_base64": ""
+                }
+            }
+        ]
+    },
+    "local": {
+        "en": {
+            "LibTitle": "Screen Mirror",
+            "ScreenMirror": {
+                "Title": "Screen Mirror",
+                "Tip": "Display a portion of the current screen.",
+                "UI": {
+                    "GetScreenArea": "Get Screen Area",
+                    "UpdateInterval": "Update Interval (ms)",
+                    "ScreenId": "Screen ID"
+                }
+            }
+        }
+    }
+}

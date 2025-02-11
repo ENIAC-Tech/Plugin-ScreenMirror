@@ -1,0 +1,29 @@
+{
+  "scripts": {
+    "build": "rollup -c",
+    "dev": "npm-run-all plugin:unlink plugin:link -p plugin:watch plugin:debug",
+    "plugin:watch": "rollup -c -w --watch.onEnd=\"npm run plugin:restart\"",
+    "plugin:unlink": "flexcli plugin unlink --uuid com.eniac.screen_mirror --silent",
+    "plugin:link": "flexcli plugin link --path com.eniac.screen_mirror.plugin --uuid com.eniac.screen_mirror --start false",
+    "plugin:restart": "flexcli plugin restart --uuid=com.eniac.screen_mirror",
+    "plugin:debug": "flexcli plugin debug --uuid=com.eniac.screen_mirror",
+    "plugin:validate": "flexcli plugin validate --path com.eniac.screen_mirror.plugin",
+    "plugin:pack": "flexcli plugin pack --path com.eniac.screen_mirror.plugin",
+    "plugin:install": "flexcli plugin install --path ./com.eniac.screen_mirror.flexplugin --force"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.2.2",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.1.0",
+    "glob": "^11.0.1",
+    "npm-run-all": "^4.1.5",
+    "rollup": "^4.0.2"
+  },
+  "dependencies": {
+    "screenshot-desktop": "^1.15.1",
+    "sharp": "^0.33.5"
+  }
+}
