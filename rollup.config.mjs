@@ -51,11 +51,9 @@ const config = {
    * Mark .node files and 'sharp' itself as external so that Rollup doesn't bundle them.
    */
 	external: (id) => {
-		// Option A: if the dependency name is exactly "sharp" or "screenshot-desktop"
-		if (id === "sharp" || id === "screenshot-desktop") {
+		if (id === "sharp") {
 		  return true;
 		}
-		// Option B: also treat any .node file path as external
 		if (id.endsWith(".node")) {
 		  return true;
 		}

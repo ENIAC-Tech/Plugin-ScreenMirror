@@ -5,7 +5,7 @@
     "author": "ENIAC",
     "entry": "backend/plugin.cjs",
     "description": "Display a portion of the current screen.",
-    "repo": "https://github.com/ENIAC-Tech/ScreenMirror",
+    "repo": "https://github.com/ENIAC-Tech/Plugin-ScreenMirror",
     "sdk": {
         "version": "1.0.0"
     },
