@@ -1,4 +1,4 @@
-const { plugin, logger, pluginPath, resourcesPath } = require("flexdesigner")
+const { plugin, logger, pluginPath, resourcesPath } = require("@eniac/flexdesigner")
 const path = require('path')
 const screenshot = require('screenshot-desktop')
 const sharp = require('sharp')
