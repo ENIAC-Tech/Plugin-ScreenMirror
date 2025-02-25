@@ -1,7 +1,7 @@
 const { plugin, logger, pluginPath, resourcesPath } = require("@eniac/flexdesigner")
 const path = require('path')
 const screenshot = require('screenshot-desktop')
-const sharp = require('sharp')
+const { Jimp } = require('jimp')
 
 const tasks = {}
 
@@ -93,18 +93,17 @@ async function syncScreenArea(serialNumber, key) {
         }
         const imgBuffer = await screenshot(options);
 
-        const outputBuffer = await sharp(imgBuffer)
-        .extract({
-            left: bounds.x,
-            top: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-        })
-        .resize(key.width, 60, {
-            fit: 'contain',
-        })
-        .png()
-        .toBuffer();
+        const image = await Jimp.read(imgBuffer);
+
+        const outputBuffer = await image
+            .crop({ 
+                x: bounds.x,
+                y: bounds.y,
+                w: bounds.width, 
+                h: bounds.height
+            })
+            .resize({ w: key.width, h: 60, mode: Jimp.RESIZE_BEZIER})
+            .getBuffer('image/png');
 
         const base64 = `data:image/png;base64,${outputBuffer.toString('base64')}`;
         plugin.draw(serialNumber, key, 'base64', base64)
