@@ -41,7 +41,13 @@ const config = {
       exportConditions: ["node"],
       preferBuiltins: true,
     }),
-    commonjs(),
+    commonjs({
+      dynamicRequireTargets: [
+        'node_modules/sharp/**/*.node',
+        'node_modules/sharp/lib/*.js'
+      ],
+      ignoreDynamicRequires: true
+    }),
     !isWatching && terser(),
     {
       name: "emit-module-package-file",
@@ -66,18 +72,7 @@ const config = {
       ],
     }),
   ],
-  /**
-   * Mark .node files and 'sharp' itself as external so that Rollup doesn't bundle them.
-   */
-  external: (id) => {
-    if (id === "sharp") {
-      return true;
-    }
-    if (id.endsWith(".node")) {
-      return true;
-    }
-    return false;
-  },
+
 };
 
 export default config;
