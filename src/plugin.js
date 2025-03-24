@@ -106,7 +106,7 @@ async function syncScreenArea(serialNumber, key) {
             .getBuffer('image/png');
 
         const base64 = `data:image/png;base64,${outputBuffer.toString('base64')}`;
-        plugin.draw(serialNumber, key, 'base64', base64)
+        await plugin.draw(serialNumber, key, 'base64', base64)
     } catch (error) {
         logger.error('syncScreenArea:', error)
         clearInterval(tasks[serialNumber][key.uid])
