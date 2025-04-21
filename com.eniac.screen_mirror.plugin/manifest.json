@@ -1,7 +1,7 @@
 {
     "name": "Screen Mirror",
     "uuid": "com.eniac.screen_mirror",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "author": "ENIAC",
     "entry": "backend/plugin.cjs",
     "description": "Display a portion of the current screen.",
@@ -12,6 +12,7 @@
     "software": {
         "minimumVersion": "1.0.0"
     },
+    "configPage": "config",
     "os": [
         {
             "platform": "mac",
@@ -75,6 +76,13 @@
                     "UpdateInterval": "Update Interval (ms)",
                     "ScreenId": "Screen ID"
                 }
+            },
+            "Config": {
+                "Title": "Screen Mirror Config",
+                "Shortcut": "Manual Update Shortcut",
+                "ShortcutTip": "Set the shortcut key to manually capture the screen.",
+                "SeeShortcut": "See valid shortcuts at https://www.electronjs.org/docs/latest/api/accelerator",
+                "SaveSuccess": "Config saved successfully"
             }
         }
     }
