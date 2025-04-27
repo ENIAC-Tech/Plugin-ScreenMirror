@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "jimp": "^1.6.0",
-    "screenshot-desktop": "^1.15.1"
+    "screenshot-desktop": "^1.15.1",
+    "@eniac/flexdesigner": "^1.0.3"
   }
 }
