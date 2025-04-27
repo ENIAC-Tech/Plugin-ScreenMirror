@@ -10,13 +10,13 @@ const screenTasks = {}
 const deviceKeys = {}
 
 plugin.on('plugin.config.updated', (payload) => {
-    logger.info('Plugin config updated:', payload)
+    logger.debug('Plugin config updated:', payload)
 
     updateShortcuts()
 })
 
 plugin.on('system.shortcut', (payload) => {
-    logger.info('Received shortcut:', payload)
+    logger.debug('Received shortcut:', payload)
     // Force update all screen captures
     forceUpdateAllScreens()
 })
@@ -27,7 +27,7 @@ plugin.on('system.shortcut', (payload) => {
  * @param {object} payload message sent from UI
  */
 plugin.on('ui.message', async (payload) => {
-    logger.info('Received message from UI:', payload)
+    logger.debug('Received message from UI:', payload)
     if (payload.action === 'listDisplays') {
         return await screenshot.listDisplays()
     }
@@ -50,11 +50,20 @@ plugin.on('ui.message', async (payload) => {
  * ]
  */
 plugin.on('device.status', (devices) => {
-    logger.info('Device status changed:', devices)
+    logger.debug('Device status changed:', devices)
     for (let device of devices) {
         if (device.status === 'disconnected') {
+            logger.debug(`Device ${device.serialNumber} disconnected, cleaning up resources`)
+            
             // Delete all key data for the device
             delete deviceKeys[device.serialNumber]
+            
+            // Clean up this device from all screen tasks
+            for (let screenId in screenTasks) {
+                if (screenTasks[screenId].devices && screenTasks[screenId].devices[device.serialNumber]) {
+                    delete screenTasks[screenId].devices[device.serialNumber]
+                }
+            }
             
             // Check if other devices are still using the same screen
             checkAndCleanupScreenTasks()
@@ -67,48 +76,95 @@ plugin.on('device.status', (devices) => {
  * @param {Object} payload alive key data
  */
 plugin.on('plugin.alive', (payload) => {
-    logger.info('Plugin alive:', payload)
-    const data = payload.keys
+    logger.debug('Plugin alive:', payload)
+    const keys = payload.keys || []
     const serialNumber = payload.serialNumber
 
-    // Initialize or update device key data
-    if (!deviceKeys[serialNumber]) {
+    // Clear all existing keys for this device first
+    if (deviceKeys[serialNumber]) {
+        deviceKeys[serialNumber] = {}
+    } else {
         deviceKeys[serialNumber] = {}
     }
 
+    // If there are no keys, just clean up and exit
+    if (!keys.length) {
+        logger.debug(`No keys for device ${serialNumber}, cleaning up tasks`)
+        checkAndCleanupScreenTasks()
+        return
+    }
+
     // Update device key data
-    for (let key of payload.keys) {
+    for (let key of keys) {
         deviceKeys[serialNumber][key.uid] = key
     }
 
     // Reconfigure all screen capture tasks
     configureScreenTasks()
+    
+    // Immediately capture and send screenshots for the first time
+    sendImmediateScreenshots(serialNumber, keys)
+})
+
+// Add a new inactive event handler
+plugin.on('plugin.inactive', (payload) => {
+    logger.debug('Plugin inactive:', payload)
+    const serialNumber = payload.serialNumber
+    
+    // Clear keys for this device
+    if (deviceKeys[serialNumber]) {
+        delete deviceKeys[serialNumber]
+    }
+    
+    // Clean up screen tasks
+    checkAndCleanupScreenTasks()
 })
 
 // Configure all screen capture tasks
 function configureScreenTasks() {
     // Stop all existing screen tasks
     for (let screenId in screenTasks) {
-        clearInterval(screenTasks[screenId].intervalId)
+        if (screenTasks[screenId].intervalId) {
+            clearInterval(screenTasks[screenId].intervalId)
+        }
+    }
+    
+    // Clear all screen tasks if no device keys exist
+    if (Object.keys(deviceKeys).length === 0) {
+        for (let screenId in screenTasks) {
+            delete screenTasks[screenId]
+        }
+        logger.debug('No devices with keys, all screen tasks cleared')
+        return
     }
     
     // Initialize screen task mapping
     const screenConfigs = {}
+    let hasActiveKeys = false
     
     // Iterate through all devices and keys, group by screen ID and find minimum interval for each screen
     for (let serialNumber in deviceKeys) {
+        const deviceKeyCount = Object.keys(deviceKeys[serialNumber]).length
+        if (deviceKeyCount === 0) continue
+        
         for (let keyUid in deviceKeys[serialNumber]) {
+            hasActiveKeys = true
             const key = deviceKeys[serialNumber][keyUid]
-            const interval = parseInt(key.data.interval)
+            const interval = parseInt(key.data.interval || '0')
             const screenId = key.data.screenId || 'default'
             
             if (!screenConfigs[screenId]) {
                 screenConfigs[screenId] = {
                     minInterval: interval,
+                    hasAutoUpdate: interval > 0,
                     devices: {}
                 }
-            } else if (interval < screenConfigs[screenId].minInterval) {
-                screenConfigs[screenId].minInterval = interval
+            } else {
+                // 只有当当前按键的间隔 > 0 且小于现有最小间隔时才更新最小间隔
+                if (interval > 0 && (interval < screenConfigs[screenId].minInterval || !screenConfigs[screenId].hasAutoUpdate)) {
+                    screenConfigs[screenId].minInterval = interval
+                    screenConfigs[screenId].hasAutoUpdate = true
+                }
             }
             
             // Record which devices use this screen
@@ -119,17 +175,49 @@ function configureScreenTasks() {
         }
     }
     
+    // If no active keys found, clear all screen tasks
+    if (!hasActiveKeys) {
+        logger.debug('No active keys found, clearing all screen tasks')
+        for (let screenId in screenTasks) {
+            delete screenTasks[screenId]
+        }
+        return
+    }
+    
+    // Clear screen tasks that are no longer needed
+    for (let screenId in screenTasks) {
+        if (!screenConfigs[screenId]) {
+            delete screenTasks[screenId]
+        }
+    }
+    
     // Create a capture task for each screen
     for (let screenId in screenConfigs) {
         const config = screenConfigs[screenId]
         
+        // Only create tasks for screens with devices and keys
+        if (Object.keys(config.devices).length === 0) continue
+        
+        logger.debug(`Configuring screen ${screenId}, hasAutoUpdate: ${config.hasAutoUpdate}, minInterval: ${config.minInterval}`)
+        
+        // 创建屏幕任务，但只有在hasAutoUpdate为true时才创建定时器
         screenTasks[screenId] = {
             lastScreenshot: null,
             timestamp: 0,
-            intervalId: setInterval(async () => {
+            intervalId: config.hasAutoUpdate ? setInterval(async () => {
+                // Double check if this screen is still needed before capturing
+                if (!isScreenInUse(screenId)) {
+                    if (screenTasks[screenId].intervalId) {
+                        clearInterval(screenTasks[screenId].intervalId)
+                    }
+                    delete screenTasks[screenId]
+                    logger.debug(`Screen ${screenId} no longer in use, stopping capture task`)
+                    return
+                }
                 await captureAndProcessScreen(screenId, config.devices)
-            }, config.minInterval),
+            }, config.minInterval) : null,
             minInterval: config.minInterval,
+            hasAutoUpdate: config.hasAutoUpdate,
             devices: config.devices
         }
     }
@@ -164,6 +252,13 @@ function checkAndCleanupScreenTasks() {
 
 // Capture and process screen
 async function captureAndProcessScreen(screenId, devices) {
+    logger.debug(`Capturing and processing screen ${screenId}`, devices)
+    // Safety check - verify the screen task still exists
+    if (!screenTasks[screenId]) {
+        logger.debug(`Screen task for ${screenId} no longer exists, skipping capture`)
+        return
+    }
+    
     try {
         // Capture screen once
         const options = {
@@ -185,19 +280,83 @@ async function captureAndProcessScreen(screenId, devices) {
         // Collect all tasks to process
         const processingTasks = []
         
+        // Safety check - verify 'devices' object exists and is valid
+        if (!devices) {
+            logger.error(`Invalid devices object for screen ${screenId}`)
+            return
+        }
+        
+        // Flag to track if screen configuration changed
+        let configChanged = false
+        
         // Prepare processing tasks for each device and key using this screen
         for (let serialNumber in devices) {
+            // Skip if the device has been disconnected
+            if (!deviceKeys[serialNumber]) {
+                logger.debug(`Device ${serialNumber} no longer exists, removing from screen task`)
+                delete screenTasks[screenId].devices[serialNumber]
+                configChanged = true
+                continue
+            }
+            
             const keyUids = devices[serialNumber]
+            if (!keyUids || !Array.isArray(keyUids)) {
+                logger.error(`Invalid keyUids for device ${serialNumber}, removing from screen task`)
+                delete screenTasks[screenId].devices[serialNumber]
+                configChanged = true
+                continue
+            }
+            
+            // New array to hold valid keys
+            const validKeyUids = []
             
             for (let keyUid of keyUids) {
-                const key = deviceKeys[serialNumber][keyUid]
-                if (!key) continue // Prevent processing keys that were deleted
+                // Skip if the key no longer exists
+                if (!deviceKeys[serialNumber] || !deviceKeys[serialNumber][keyUid]) {
+                    logger.debug(`Key ${keyUid} no longer exists for device ${serialNumber}, removing from screen task`)
+                    configChanged = true
+                    continue
+                }
                 
+                const key = deviceKeys[serialNumber][keyUid]
+                if (!key) {
+                    logger.debug(`Key data is null for ${keyUid}, removing from screen task`)
+                    configChanged = true
+                    continue
+                }
+                
+                // This is a valid key, add it to processing tasks and valid keys list
                 processingTasks.push({
                     serialNumber,
                     key,
                     bounds: key.data.bounds
                 })
+                validKeyUids.push(keyUid)
+            }
+            
+            // Update the device's key list with only valid keys
+            if (validKeyUids.length !== keyUids.length) {
+                if (validKeyUids.length > 0) {
+                    screenTasks[screenId].devices[serialNumber] = validKeyUids
+                } else {
+                    // If no valid keys left, remove the device from this screen
+                    delete screenTasks[screenId].devices[serialNumber]
+                }
+                configChanged = true
+            }
+        }
+        
+        // If configuration changed, check if we should clean up screen tasks
+        if (configChanged) {
+            // Check if the screen still has any devices
+            const devicesLeft = Object.keys(screenTasks[screenId].devices).length
+            if (devicesLeft === 0) {
+                logger.debug(`No devices left for screen ${screenId}, removing screen task`)
+                if (screenTasks[screenId].intervalId) {
+                    clearInterval(screenTasks[screenId].intervalId)
+                }
+                delete screenTasks[screenId]
+                return
             }
         }
         
@@ -224,7 +383,6 @@ async function captureAndProcessScreen(screenId, devices) {
                 logger.error(`Error processing image for key ${task.key.uid}:`, err)
             }
         }
-        
     } catch (error) {
         logger.error(`Error capturing screen ${screenId}:`, error)
     }
@@ -281,6 +439,84 @@ async function updateShortcuts() {
                 action: 'register'
             }
         ])
+    }
+}
+
+// New helper function to check if a screen is still in use
+function isScreenInUse(screenId) {
+    for (let serialNumber in deviceKeys) {
+        for (let keyUid in deviceKeys[serialNumber]) {
+            const key = deviceKeys[serialNumber][keyUid]
+            const keyScreenId = key.data.screenId || 'default'
+            
+            if (keyScreenId === screenId) {
+                return true
+            }
+        }
+    }
+    return false;
+}
+
+// Helper function to immediately capture and send screenshots when first alive
+async function sendImmediateScreenshots(serialNumber, keys) {    
+    // Group keys by screenId for efficient capturing
+    const screenGroups = {}
+    
+    for (let key of keys) {
+        const screenId = key.data.screenId || 'default'
+        if (!screenGroups[screenId]) {
+            screenGroups[screenId] = []
+        }
+        screenGroups[screenId].push(key)
+    }
+    
+    // Capture and process each screen
+    for (let screenId in screenGroups) {
+        try {
+            // Capture screen
+            const options = {
+                format: 'png',
+            }
+            
+            if (screenId !== 'default') {
+                options.screen = screenId
+            }
+            
+            logger.debug(`Immediate capture for screen ${screenId}`)
+            const imgBuffer = await screenshot(options)
+            const image = await Jimp.read(imgBuffer)
+            
+            // Store in cache for later use
+            if (screenTasks[screenId]) {
+                screenTasks[screenId].lastScreenshot = image
+                screenTasks[screenId].timestamp = Date.now()
+            }
+            
+            // Process each key that uses this screen
+            for (let key of screenGroups[screenId]) {
+                try {
+                    const bounds = key.data.bounds
+                    
+                    const croppedImage = image.clone()
+                        .crop({ 
+                            x: bounds.x,
+                            y: bounds.y,
+                            w: bounds.width, 
+                            h: bounds.height
+                        })
+                        .resize({ w: key.width, h: 60, mode: Jimp.RESIZE_BEZIER})
+                    
+                    const outputBuffer = await croppedImage.getBuffer('image/png')
+                    const base64 = `data:image/png;base64,${outputBuffer.toString('base64')}`
+                    
+                    await plugin.draw(serialNumber, key, 'base64', base64)
+                } catch (err) {
+                    logger.error(`Error processing immediate image for key ${key.uid}:`, err)
+                }
+            }
+        } catch (error) {
+            logger.error(`Error in immediate capture for screen ${screenId}:`, error)
+        }
     }
 }
 

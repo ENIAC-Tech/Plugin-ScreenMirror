@@ -51,7 +51,8 @@ export default {
   watch: {
     "modelValue.data.interval": {
       handler: function (val) {
-        if (parseInt(val) < 350) {
+        const interval = parseInt(val)
+        if (interval < 350 && interval != 0) {
           this.modelValue.data.interval = 350;
         }
       },

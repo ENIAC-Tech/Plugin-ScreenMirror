@@ -24,7 +24,6 @@
     "rollup-plugin-copy": "^3.5.0"
   },
   "dependencies": {
-    "@eniac/flexdesigner": "^1.0.1",
     "jimp": "^1.6.0",
     "screenshot-desktop": "^1.15.1"
   }
