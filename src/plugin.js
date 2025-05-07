@@ -9,6 +9,7 @@ const screenTasks = {}
 // Store key data by device serial number
 const deviceKeys = {}
 
+
 plugin.on('plugin.config.updated', (payload) => {
     logger.debug('Plugin config updated:', payload)
 
@@ -29,7 +30,34 @@ plugin.on('system.shortcut', (payload) => {
 plugin.on('ui.message', async (payload) => {
     logger.debug('Received message from UI:', payload)
     if (payload.action === 'listDisplays') {
-        return await screenshot.listDisplays()
+        // 1. First use screenshot-desktop to get basic info (id/name)
+        const baseList = await screenshot.listDisplays()
+
+        // 2. For macOS, additionally use Electron's screen API to get pixel dimensions and scale factor
+        if (process.platform === 'darwin') {
+            try {
+                const electronDisplays = await plugin.electronAPI('screen.getAllDisplays') || []
+
+                baseList.forEach(disp => {
+                    // Try to match by name (label) or array index
+                    const match = electronDisplays.find(ed => ed.label === disp.name) || electronDisplays[baseList.indexOf(disp)]
+
+                    if (match && match.bounds) {
+                        disp.top    = match.bounds.y
+                        disp.left   = match.bounds.x
+                        disp.right  = match.bounds.x + match.bounds.width
+                        disp.bottom = match.bounds.y + match.bounds.height
+                        disp.width  = match.bounds.width
+                        disp.height = match.bounds.height
+                        disp.dpiScale = match.scaleFactor
+                    }
+                })
+            } catch (err) {
+                logger.error('Failed to merge electron display info:', err)
+            }
+        }
+
+        return baseList
     }
 })
 
@@ -128,7 +156,7 @@ function configureScreenTasks() {
             clearInterval(screenTasks[screenId].intervalId)
         }
     }
-    
+     
     // Clear all screen tasks if no device keys exist
     if (Object.keys(deviceKeys).length === 0) {
         for (let screenId in screenTasks) {
@@ -364,13 +392,19 @@ async function captureAndProcessScreen(screenId, devices) {
             try {
                 const { serialNumber, key, bounds } = task
                 
+                // 新增：在裁剪前对 bounds 做健壮性校验，若为 null/undefined 或非数字则退化为整屏截图
+                const bx = Number.isFinite(bounds?.x) ? bounds.x : 0
+                const by = Number.isFinite(bounds?.y) ? bounds.y : 0
+                const bw = Number.isFinite(bounds?.width) && bounds.width > 0 ? bounds.width : image.bitmap.width
+                const bh = Number.isFinite(bounds?.height) && bounds.height > 0 ? bounds.height : image.bitmap.height
+                
                 // Crop from original image and resize
                 const croppedImage = image.clone()
                     .crop({ 
-                        x: bounds.x,
-                        y: bounds.y,
-                        w: bounds.width, 
-                        h: bounds.height
+                        x: bx,
+                        y: by,
+                        w: bw, 
+                        h: bh
                     })
                     .resize({ w: key.width, h: 60, mode: Jimp.RESIZE_BEZIER})
                 
@@ -497,12 +531,18 @@ async function sendImmediateScreenshots(serialNumber, keys) {
                 try {
                     const bounds = key.data.bounds
                     
+                    // 新增：在裁剪前对 bounds 做健壮性校验，若为 null/undefined 或非数字则退化为整屏截图
+                    const bx = Number.isFinite(bounds?.x) ? bounds.x : 0
+                    const by = Number.isFinite(bounds?.y) ? bounds.y : 0
+                    const bw = Number.isFinite(bounds?.width) && bounds.width > 0 ? bounds.width : image.bitmap.width
+                    const bh = Number.isFinite(bounds?.height) && bounds.height > 0 ? bounds.height : image.bitmap.height
+                    
                     const croppedImage = image.clone()
                         .crop({ 
-                            x: bounds.x,
-                            y: bounds.y,
-                            w: bounds.width, 
-                            h: bounds.height
+                            x: bx,
+                            y: by,
+                            w: bw, 
+                            h: bh
                         })
                         .resize({ w: key.width, h: 60, mode: Jimp.RESIZE_BEZIER})
                     
@@ -525,4 +565,6 @@ plugin.start()
 // wait for plugin to be ready
 setTimeout(async () => {
     await updateShortcuts()
+logger.info('screen.getAllDisplays', await plugin.electronAPI('screen.getAllDisplays'))
+
 }, 500);

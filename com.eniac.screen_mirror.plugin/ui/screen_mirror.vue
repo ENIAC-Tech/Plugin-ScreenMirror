@@ -176,8 +176,10 @@ export default {
         * }
         */
         const screenshotData = await this.$fd.takeScreenshot();
+        console.log(screenshotData);
         this.modelValue.data._base64 = screenshotData.base64;
         var display = this.displays[0]
+        display.dpiScale = display.dpiScale || 1
         if (this.modelValue.data.screenId.length > 0) {
           display = this.displays.find((display) => display.id === this.modelValue.data.screenId);
         }
@@ -208,6 +210,7 @@ export default {
          *  }
          */
         this.displays = await this.$fd.sendToBackend({ action: "listDisplays" });
+        console.log(this.displays);
         this.drawDisplays();
       } catch (error) {
         this.$fd.error(error);
