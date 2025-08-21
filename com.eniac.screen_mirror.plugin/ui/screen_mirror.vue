@@ -24,10 +24,66 @@
         <canvas ref="screenCanvas" style="width:100%; height: 200px; display: block;"></canvas>
       </v-col>
       <v-col cols="12" class="d-flex justify-center">
-        <div class="flex-column overflow-auto">
+        <div class="d-flex flex-column align-center overflow-auto">
           <v-img :src="modelValue.data._base64" :width="modelValue.style.width" height="60" contain
             style="border: 1px solid #ccc; border-radius: 8px;"></v-img>
-          <p class="text-body-1">{{ bounds }}</p>
+          <p class="text-body-1 text-center">{{ bounds }}</p>
+          
+          <!-- Bounds Fine Adjustment Controls -->
+          <div v-if="modelValue.data.bounds" class="mt-4 d-flex flex-column align-center">
+            <p class="text-subtitle-2 mb-2 text-center">{{ $t('ScreenMirror.UI.BoundsAdjustment') || 'Bounds Adjustment' }}</p>
+            <div class="d-flex flex-wrap justify-center gap-2">
+              <!-- X Position -->
+              <v-text-field
+                v-model.number="boundsAdjustment.x"
+                @update:modelValue="onBoundsInput('x', $event)"
+                label="X"
+                type="number"
+                style="width: 100px;"
+                variant="outlined"
+                density="compact"
+                hide-details
+              ></v-text-field>
+
+              <!-- Y Position -->
+              <v-text-field
+                v-model.number="boundsAdjustment.y"
+                @update:modelValue="onBoundsInput('y', $event)"
+                label="Y"
+                type="number"
+                style="width: 100px;"
+                variant="outlined"
+                density="compact"
+                hide-details
+              ></v-text-field>
+
+              <!-- Width -->
+              <v-text-field
+                v-model.number="boundsAdjustment.width"
+                @update:modelValue="onBoundsInput('width', $event)"
+                label="Width"
+                type="number"
+                style="width: 100px;"
+                variant="outlined"
+                density="compact"
+                hide-details
+                :min="1"
+              ></v-text-field>
+
+              <!-- Height -->
+              <v-text-field
+                v-model.number="boundsAdjustment.height"
+                @update:modelValue="onBoundsInput('height', $event)"
+                label="Height"
+                type="number"
+                style="width: 100px;"
+                variant="outlined"
+                density="compact"
+                hide-details
+                :min="1"
+              ></v-text-field>
+            </div>
+          </div>
         </div>
       </v-col>
     </v-row>
@@ -46,6 +102,12 @@ export default {
     return {
       loading: false,
       displays: [],
+      boundsAdjustment: {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0
+      }
     };
   },
   watch: {
@@ -61,6 +123,15 @@ export default {
       handler: function (val) {
         this.drawDisplays();
       },
+    },
+    "modelValue.data.bounds": {
+      handler: function (val) {
+        if (val) {
+          this.boundsAdjustment = { ...val };
+          this.drawDisplays();
+        }
+      },
+      deep: true
     },
   },
   computed: {
@@ -215,6 +286,38 @@ export default {
       } catch (error) {
         this.$fd.error(error);
       }
+    },
+
+    onBoundsInput(property, value) {
+      if (!this.modelValue.data.bounds || value === null || value === undefined) return;
+      
+      const numValue = parseInt(value);
+      if (isNaN(numValue)) return;
+      
+      // Basic validation
+      if (property === 'x' || property === 'y') {
+        if (numValue < 0) return;
+      } else if (property === 'width' || property === 'height') {
+        if (numValue <= 0) return;
+      }
+      
+      // Get current display for boundary validation
+      const currentDisplay = this.displays.find(d => d.id === this.modelValue.data.screenId) || this.displays[0];
+      if (currentDisplay) {
+        // Validate bounds don't exceed display boundaries
+        const bounds = { ...this.modelValue.data.bounds, [property]: numValue };
+        if (bounds.x + bounds.width > currentDisplay.width || bounds.y + bounds.height > currentDisplay.height) {
+          // Reset to previous value if invalid
+          this.boundsAdjustment[property] = this.modelValue.data.bounds[property];
+          return;
+        }
+      }
+      
+      // Update the bounds
+      this.modelValue.data.bounds[property] = numValue;
+      
+      // Redraw canvas to show updated bounds
+      this.drawDisplays();
     }
   },
   mounted() {
@@ -225,4 +328,8 @@ export default {
 };
 </script>
 
-<style scoped></style>
+<style scoped>
+.gap-2 {
+  gap: 8px;
+}
+</style>

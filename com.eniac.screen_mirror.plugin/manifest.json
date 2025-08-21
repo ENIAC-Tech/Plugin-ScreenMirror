@@ -1,7 +1,7 @@
 {
     "name": "Screen Mirror",
     "uuid": "com.eniac.screen_mirror",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "author": "ENIAC",
     "entry": "backend/plugin.cjs",
     "description": "Display a portion of the current screen.",
@@ -74,7 +74,8 @@
                 "UI": {
                     "GetScreenArea": "Get Screen Area",
                     "UpdateInterval": "Update Interval (ms)",
-                    "ScreenId": "Screen ID"
+                    "ScreenId": "Screen ID",
+                    "BoundsAdjustment": "Bounds Adjustment"
                 }
             },
             "Config": {
